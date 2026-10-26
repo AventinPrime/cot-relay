@@ -1,0 +1,62 @@
+# Copy to config.yaml and fill in with your own servers.
+
+servers:
+  - name: server_a              # used in routing rules, and as the uid namespace prefix when trust_uid is false
+    host: 192.168.1.10
+    port: 8089
+    cert: certs/server_a/client.pem
+    key: certs/server_a/client.key
+    ca: certs/server_a/ca.pem   # CA issued during this server's enrollment
+    # cert_password: "..."      # only if cert is a .p12/.pfx
+    # ca_password: "..."        # only if ca is a .p12/.pfx (truststore)
+    verify_ca: true             # false - if ca isn't set / you trust the server without verification (not recommended)
+    direction: both             # in | out | both
+    trust_uid: true             # default. false = namespace this source's uids ("server_a-<uid>") instead of
+                                 # merging by raw uid - use false for predictable/generated uid schemes (sensor
+                                 # or detection feeds) where a collision with another server's uid is plausible
+
+  - name: server_b
+    host: 192.168.2.20
+    port: 8089
+    cert: certs/server_b/client.pem
+    key: certs/server_b/client.key
+    ca: certs/server_b/ca.pem
+    verify_ca: true
+    direction: both
+
+# Routing rules. "from" is the source, "to" is the list of destinations.
+# ONE-WAY by default: if you want visibility in both directions, add the
+# mirrored rule too (server_b -> server_a).
+routes:
+  - from: server_a
+    to: [server_b]
+    # cot_type_prefix: "a-f-G"      # optional: friendly ground only
+    # exclude_uid_prefix: "TEST-"   # optional: don't forward test markers
+
+  - from: server_b
+    to: [server_a]
+
+# Threshold for a "significant" change, past which the relay actually
+# pushes the update onward (instead of staying quiet to save bandwidth).
+filter:
+  distance_threshold_m: 25      # position shift big enough to trigger a push
+  heartbeat_interval_s: 60      # push even without movement, at least once every N sec
+
+# TTL for an object in the State Store - if nothing has come in from it
+# for longer than this, it's purged from the relay's memory.
+state:
+  stale_after_s: 120
+
+# Self-presence: the relay introduces itself on each server with its own
+# marker (uid "relay-<server name from this config>", callsign
+# "<prefix> (<name>)"), so it's visible in the unit list instead of being
+# a nameless TCP client. Without real lat/lon the marker sits at
+# null-island (0,0) with a huge ce - that's expected, the relay isn't
+# physically tied to one location. If you want to see it on the map at a
+# specific spot (e.g. wherever the relay process physically runs) - set
+# lat/lon.
+identity:
+  callsign_prefix: "CoT-Relay"
+  lat: null
+  lon: null
+  stale_seconds: 90

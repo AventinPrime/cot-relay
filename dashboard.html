@@ -1,0 +1,1039 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CoT Relay Panel</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  :root {
+    --bg: #0f1419; --panel: #171d26; --border: #2a3341; --text: #e6edf3;
+    --muted: #8b98a5; --green: #3fb950; --red: #f85149; --grey: #6e7681;
+    --accent: #58a6ff;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; padding: 24px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 15px; color: var(--muted); margin: 32px 0 12px; text-transform: uppercase; letter-spacing: .04em; }
+  h2:first-child { margin-top: 0; }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 24px; }
+  .top-bar { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-left: 3px solid var(--grey); border-radius: 8px; padding: 14px 16px; }
+  .card.connected { border-left-color: var(--green); }
+  .card.disconnected { border-left-color: var(--red); }
+  .card.server-disabled { opacity: .5; border-left-color: var(--grey); }
+  .card.feed-active { border-color: var(--accent); }
+  .card-top { display: flex; justify-content: space-between; align-items: center; }
+  .card-name { font-weight: 600; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--grey); }
+  .connected .dot { background: var(--green); }
+  .disconnected .dot { background: var(--red); }
+  .card-meta { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  .card-actions { margin-top: 10px; display: flex; gap: 8px; }
+  button, .btn { background: #21262d; color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 5px 10px; font-size: 12px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  .btn-primary { background: var(--accent); color: #0f1419; border: none; font-weight: 600; }
+  .btn-danger:hover { border-color: var(--red); color: var(--red); }
+  .add-tile { display: flex; align-items: center; justify-content: center; border: 1px dashed var(--border); border-radius: 8px; color: var(--muted); cursor: pointer; min-height: 80px; }
+  .add-tile:hover { color: var(--accent); border-color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; text-transform: uppercase; }
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); align-items: center; justify-content: center; z-index: 10; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 20px; width: 420px; max-width: 90vw; }
+  .modal h3 { margin-top: 0; }
+  .field { margin-bottom: 10px; }
+  .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .field input, .field select { width: 100%; background: #0f1419; border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 7px 9px; font-size: 13px; }
+  .field.checkbox { display: flex; align-items: center; gap: 8px; }
+  .field.checkbox input { width: auto; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+  .tag { display: inline-block; background: #21262d; border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; font-size: 11px; color: var(--muted); }
+  .seg-toggle { display: flex; gap: 10px; margin-bottom: 14px; }
+  .seg-btn { flex: 1; padding: 12px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--text); cursor: pointer; font-size: 13px; font-weight: 600; }
+  .seg-btn.active { border-color: var(--green); color: var(--green); }
+  .hint { color: var(--muted); font-size: 12px; line-height: 1.5; margin-bottom: 14px; }
+  .lang-toggle { display: flex; gap: 6px; flex-shrink: 0; }
+  .lang-toggle .seg-btn { flex: none; width: 42px; padding: 6px 0; font-size: 12px; margin-bottom: 0; }
+  .lang-toggle .seg-btn.wide { width: auto; padding: 6px 12px; }
+  .tab-bar { display: flex; gap: 4px; margin: 24px 0 4px; border-bottom: 1px solid var(--border); }
+  .tab-btn { background: transparent; border: none; border-bottom: 2px solid transparent; color: var(--muted); padding: 10px 6px; margin-right: 18px; font-size: 14px; cursor: pointer; border-radius: 0; }
+  .tab-btn:hover { border-color: transparent; color: var(--text); }
+  .tab-btn.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+  .tab-panel { padding-top: 8px; }
+  .color-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+  #map { height: 540px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
+  #map-filters label { display: inline-flex; align-items: center; gap: 6px; margin-right: 16px; margin-bottom: 8px; font-size: 13px; cursor: pointer; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <div>
+    <h1 data-i18n="heading">CoT Relay Panel</h1>
+    <div class="sub" data-i18n="sub">Manage connections to TAK servers and the CoT routing rules between them.</div>
+  </div>
+  <div class="lang-toggle">
+    <button type="button" class="seg-btn" id="lang-en" onclick="setLang('en')">EN</button>
+    <button type="button" class="seg-btn" id="lang-ru" onclick="setLang('ru')">RU</button>
+    <button type="button" class="seg-btn wide" id="auth-settings-btn" data-i18n="panel_access_btn" onclick="openAuthModal()">Panel access</button>
+  </div>
+</div>
+
+<div class="tab-bar">
+  <button class="tab-btn active" data-tab="servers" data-i18n="tab_servers" onclick="switchTab('servers')">Servers</button>
+  <button class="tab-btn" data-tab="feed" data-i18n="tab_feed" onclick="switchTab('feed')">Live Feed</button>
+  <button class="tab-btn" data-tab="chat" data-i18n="tab_chat" onclick="switchTab('chat')">Chat</button>
+  <button class="tab-btn" data-tab="map" data-i18n="tab_map" onclick="switchTab('map')">Map</button>
+</div>
+
+<!-- ================= SERVERS TAB ================= -->
+<div class="tab-panel" id="tab-servers">
+  <h2 data-i18n="servers_heading">Servers</h2>
+  <div class="grid" id="servers-grid"></div>
+
+  <h2 data-i18n="routing_heading">Routing rules</h2>
+  <table>
+    <thead><tr>
+      <th data-i18n="th_from">From</th>
+      <th data-i18n="th_to">To</th>
+      <th data-i18n="th_type_filter">Type filter</th>
+      <th data-i18n="th_excl_uid">Excl. uid prefix</th>
+      <th></th>
+    </tr></thead>
+    <tbody id="routes-body"></tbody>
+  </table>
+  <div style="margin-top:10px"><button class="btn-primary" data-i18n="add_rule_btn" onclick="openRouteModal()">+ Add rule</button></div>
+</div>
+
+<!-- ================= LIVE FEED TAB ================= -->
+<div class="tab-panel" id="tab-feed" style="display:none">
+  <h2 data-i18n="feed_heading">Live Feed</h2>
+  <div class="hint" data-i18n="feed_hint">Click a server to see only the markers flowing through it. Click it again (or "All sources") to reset.</div>
+  <div class="grid" id="feed-source-grid"></div>
+
+  <h2 style="margin-top:28px"><span id="feed-filter-label" data-i18n="feed_all_label">All sources</span> <span class="tag" id="feed-count">0</span></h2>
+  <table>
+    <thead><tr>
+      <th data-i18n="th_uid">UID</th>
+      <th data-i18n="th_source">Source</th>
+      <th data-i18n="th_type">Type</th>
+      <th data-i18n="th_callsign">Callsign</th>
+      <th data-i18n="th_coordinates">Coordinates</th>
+      <th data-i18n="th_updated">Updated</th>
+      <th data-i18n="th_routed_to">Routed to</th>
+    </tr></thead>
+    <tbody id="items-body"></tbody>
+  </table>
+</div>
+
+<!-- ================= CHAT TAB ================= -->
+<div class="tab-panel" id="tab-chat" style="display:none">
+  <h2><span data-i18n="chat_heading">Chat</span> <span class="tag" id="chat-count">0</span></h2>
+  <div class="hint" data-i18n="chat_hint">GeoChat messages seen across all connections. Forwarded like any other CoT event per your routing rules - shown here separately since a message isn't a position.</div>
+  <table>
+    <thead><tr>
+      <th data-i18n="th_time">Time</th>
+      <th data-i18n="th_source">Source</th>
+      <th data-i18n="th_room">Room</th>
+      <th data-i18n="th_sender">Sender</th>
+      <th data-i18n="th_message">Message</th>
+    </tr></thead>
+    <tbody id="chat-body"></tbody>
+  </table>
+</div>
+
+<!-- ================= MAP TAB ================= -->
+<div class="tab-panel" id="tab-map" style="display:none">
+  <h2 data-i18n="map_heading">Map</h2>
+  <div class="hint" data-i18n="map_hint">Uses public OpenStreetMap tiles — requires internet access on this machine to load map imagery. Markers still plot at the correct position without internet; only the background imagery needs it.</div>
+  <div id="map-filters"></div>
+  <div id="map"></div>
+</div>
+
+<!-- Server modal -->
+<div class="modal-overlay" id="server-modal">
+  <div class="modal">
+    <h3 id="server-modal-title" data-i18n="add_server_title">Add server</h3>
+
+    <div class="field"><label data-i18n="server_name_label">Server name</label><input id="f-name"></div>
+    <div class="field"><label data-i18n="server_address_label">Server address</label><input id="f-host"></div>
+    <div class="field"><label data-i18n="port_label">Port</label><input id="f-port" value="8089"></div>
+
+    <div class="seg-toggle">
+      <button type="button" class="seg-btn active" id="seg-existing" data-i18n="seg_existing" onclick="setServerMode('existing')">Already have a certificate</button>
+      <button type="button" class="seg-btn" id="seg-enroll" data-i18n="seg_enroll" onclick="setServerMode('enroll')">Get via login/password</button>
+    </div>
+
+    <div id="mode-existing-fields">
+      <div class="hint" id="existing-hint">Upload the certificate and trust store files exactly as prepared per the standard instructions.</div>
+      <div class="field"><label data-i18n="cert_file_label">Client certificate file (client.p12 / client.pem)</label><input id="f-cert" type="file" accept=".p12,.pfx,.pem,.crt,.cer"></div>
+      <div class="field"><label data-i18n="cert_password_label">client.p12 password (if .p12)</label><input id="f-cert-password" type="password"></div>
+      <div class="field"><label data-i18n="ca_file_label">Trust store file (truststore.p12 / ca.pem)</label><input id="f-ca" type="file" accept=".p12,.pfx,.pem,.crt,.cer"></div>
+      <div class="field"><label data-i18n="ca_password_label">truststore.p12 password (if .p12)</label><input id="f-ca-password" type="password"></div>
+    </div>
+
+    <div id="mode-enroll-fields" style="display:none">
+      <div class="hint" data-i18n="enroll_hint">The relay will generate its own key and get a signed certificate from the server via login/password. The password isn't stored anywhere — it's used once, for this request only.</div>
+      <div class="field"><label data-i18n="enroll_port_label">Enroll port (usually 8446)</label><input id="f-enroll-port" value="8446"></div>
+      <div class="field"><label data-i18n="login_label">Login</label><input id="f-enroll-user"></div>
+      <div class="field"><label data-i18n="password_label">Password</label><input id="f-enroll-pass" type="password"></div>
+    </div>
+
+    <div class="field"><label data-i18n="direction_label">Direction</label>
+      <select id="f-direction"><option value="both">both</option><option value="in">in</option><option value="out">out</option></select>
+    </div>
+    <div class="field checkbox"><input type="checkbox" id="f-verify" checked><label data-i18n="verify_label" style="margin:0">Verify server certificate (verify_ca)</label></div>
+    <div class="field checkbox"><input type="checkbox" id="f-trust-uid" checked><label data-i18n="trust_uid_label" style="margin:0">Trust this server's UIDs as globally unique (merge with same-uid objects from other servers)</label></div>
+    <div class="hint" data-i18n="trust_uid_hint">Default on — matches how a real ATAK client behaves (merges by uid regardless of source). Turn off for sources with predictable/generated uid schemes (sensor or detection feeds) where a collision with another server's uid is plausible - it'll be namespaced instead, so it never merges with or overwrites anything from elsewhere.</div>
+    <div class="modal-actions">
+      <button data-i18n="cancel_btn" onclick="closeServerModal()">Cancel</button>
+      <button class="btn-primary" data-i18n="save_btn" onclick="saveServer()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Route modal -->
+<div class="modal-overlay" id="route-modal">
+  <div class="modal">
+    <h3 id="route-modal-title" data-i18n="add_rule_modal_title">Add rule</h3>
+    <div class="field"><label data-i18n="from_label">From</label><select id="r-from" onchange="renderToCheckboxes()"></select></div>
+    <div class="field">
+      <label data-i18n="to_label">To</label>
+      <div id="r-to-list" style="background:#0f1419; border:1px solid var(--border); border-radius:6px; padding:10px; max-height:160px; overflow-y:auto;"></div>
+    </div>
+    <div class="field">
+      <label data-i18n="type_filter_label">CoT type filter (optional)</label>
+      <select id="r-type-select" onchange="onTypeSelectChange()"></select>
+    </div>
+    <div class="field" id="r-type-custom-wrap" style="display:none">
+      <label data-i18n="type_filter_custom_label">Custom CoT type prefix</label>
+      <input id="r-type-custom" placeholder="a-f-G">
+    </div>
+    <div class="field"><label data-i18n="exclude_uid_label">Exclude uid prefix (optional)</label><input id="r-excl" placeholder="TEST-"></div>
+    <div class="modal-actions">
+      <button data-i18n="cancel_btn" onclick="closeRouteModal()">Cancel</button>
+      <button class="btn-primary" data-i18n="save_btn" onclick="saveRoute()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Panel access modal -->
+<div class="modal-overlay" id="auth-modal">
+  <div class="modal">
+    <h3 data-i18n="panel_access_title">Panel access</h3>
+    <div class="hint" data-i18n="panel_access_hint">Set or change the username/password required to open this panel. The password is stored as a salted hash, never in plain text.</div>
+
+    <div id="auth-current-fields" style="display:none">
+      <div class="field"><label data-i18n="current_username_label">Current username</label><input id="a-cur-user"></div>
+      <div class="field"><label data-i18n="current_password_label">Current password</label><input id="a-cur-pass" type="password"></div>
+    </div>
+
+    <div class="field"><label data-i18n="new_username_label">New username</label><input id="a-new-user"></div>
+    <div class="field"><label data-i18n="new_password_label">New password</label><input id="a-new-pass" type="password"></div>
+    <div class="field"><label data-i18n="confirm_password_label">Confirm new password</label><input id="a-confirm-pass" type="password"></div>
+
+    <div class="modal-actions">
+      <button data-i18n="cancel_btn" onclick="closeAuthModal()">Cancel</button>
+      <button class="btn-primary" data-i18n="save_btn" onclick="saveAuth()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const I18N = {
+  en: {
+    page_title: 'CoT Relay Panel',
+    heading: 'CoT Relay Panel',
+    sub: 'Manage connections to TAK servers and the CoT routing rules between them.',
+    tab_servers: 'Servers', tab_feed: 'Live Feed', tab_chat: 'Chat', tab_map: 'Map',
+    servers_heading: 'Servers',
+    feed_heading: 'Live Feed',
+    feed_hint: 'Click a server to see only the markers flowing through it. Click it again (or "All sources") to reset.',
+    feed_all_label: 'All sources',
+    map_heading: 'Map',
+    map_hint: 'Uses public OpenStreetMap tiles — requires internet access on this machine to load map imagery. Markers still plot at the correct position without internet; only the background imagery needs it.',
+    th_uid: 'UID', th_source: 'Source', th_type: 'Type', th_callsign: 'Callsign',
+    th_coordinates: 'Coordinates', th_updated: 'Updated', th_routed_to: 'Routed to',
+    th_time: 'Time', th_room: 'Room', th_sender: 'Sender', th_message: 'Message',
+    chat_heading: 'Chat',
+    chat_hint: "GeoChat messages seen across all connections. Forwarded like any other CoT event per your routing rules - shown here separately since a message isn't a position.",
+    chat_empty_state: 'no chat messages yet',
+    routing_heading: 'Routing rules',
+    th_from: 'From', th_to: 'To', th_type_filter: 'Type filter', th_excl_uid: 'Excl. uid prefix',
+    add_rule_btn: '+ Add rule',
+    add_server_tile: '+ Add server',
+    add_server_title: 'Add server',
+    edit_server_title: 'Edit server: ',
+    server_name_label: 'Server name',
+    server_address_label: 'Server address',
+    port_label: 'Port',
+    seg_existing: 'Already have a certificate',
+    seg_enroll: 'Get via login/password',
+    existing_hint: "Upload any certificate you already have — self-signed, issued by your own CA, or produced by a previous enrollment. p12 (client.p12 + truststore.p12) already contains the key; plain PEM works too if the key is embedded in the same file.",
+    existing_hint_edit: "Leave the file fields empty to keep the current certificate/trust store — upload a file only to replace it.",
+    cert_file_label: 'Client certificate file (client.pem / client.p12)',
+    cert_password_label: 'client.p12 password (if .p12)',
+    ca_file_label: 'Trust store file (CA / truststore.p12)',
+    ca_password_label: 'truststore.p12 password (if .p12)',
+    enroll_hint: "The relay will generate its own key and get a signed certificate from the server via login/password. The password isn't stored anywhere — it's used once, for this request only.",
+    enroll_port_label: 'Enroll port (usually 8446)',
+    login_label: 'Login',
+    password_label: 'Password',
+    direction_label: 'Direction',
+    verify_label: 'Verify server certificate (verify_ca)',
+    trust_uid_label: "Trust this server's UIDs as globally unique (merge with same-uid objects from other servers)",
+    trust_uid_hint: "Default on — matches how a real ATAK client behaves (merges by uid regardless of source). Turn off for sources with predictable/generated uid schemes (sensor or detection feeds) where a collision with another server's uid is plausible - it'll be namespaced instead, so it never merges with or overwrites anything from elsewhere.",
+    trust_tag_trusted: 'uid trusted',
+    trust_tag_namespaced: 'uid namespaced',
+    cancel_btn: 'Cancel',
+    save_btn: 'Save',
+    add_rule_modal_title: 'Add rule',
+    edit_rule_modal_title: 'Edit rule',
+    type_filter_custom_label: 'Custom CoT type prefix',
+    no_other_servers: 'add another server first',
+    from_label: 'From',
+    to_label: 'To (comma-separated for multiple)',
+    type_filter_label: 'CoT type prefix (optional)',
+    exclude_uid_label: 'Exclude uid prefix (optional)',
+    ca_verified: 'CA verified',
+    ca_not_verified: 'CA NOT verified',
+    status_disabled: 'disabled',
+    status_connected: 'connected',
+    status_not_connected: 'not connected',
+    no_outgoing_routes: 'no outgoing routes configured',
+    no_incoming_routes: 'no incoming routes',
+    identity_label: 'Connected as',
+    disable_btn: 'Disable',
+    enable_btn: 'Enable',
+    edit_btn: 'Edit',
+    delete_btn: 'Delete',
+    fill_name_host_alert: 'Fill in the name and address',
+    enroll_creds_alert: 'Enter a login and password to obtain the certificate',
+    cert_file_alert: 'Enter the client certificate file',
+    error_generic: 'Error',
+    confirm_delete_server: (name) => `Delete server ${name}? Its routing rules will be deleted too.`,
+    from_to_alert: 'Set a from and at least one to',
+    nowhere_no_rule: 'nowhere — no matching rule',
+    empty_items_state: 'nothing yet — waiting for data from the servers',
+    ago_suffix: 'ago',
+    unit_s: 's', unit_m: 'm', unit_h: 'h',
+    panel_access_btn: 'Panel access',
+    panel_access_title: 'Panel access',
+    panel_access_hint: 'Set or change the username/password required to open this panel. The password is stored as a salted hash, never in plain text.',
+    current_username_label: 'Current username',
+    current_password_label: 'Current password',
+    new_username_label: 'New username',
+    new_password_label: 'New password',
+    confirm_password_label: 'Confirm new password',
+    auth_fill_required_alert: 'Fill in the new username and password',
+    auth_mismatch_alert: "Passwords don't match",
+    auth_saved_alert: 'Saved. You may be asked to log in again with the new credentials.',
+  },
+  ru: {
+    page_title: 'Панель CoT Relay',
+    heading: 'Панель CoT Relay',
+    sub: 'Управление подключениями к TAK-серверам и правилами маршрутизации CoT между ними.',
+    tab_servers: 'Серверы', tab_feed: 'Live Feed', tab_chat: 'Чат', tab_map: 'Карта',
+    servers_heading: 'Серверы',
+    feed_heading: 'Live Feed',
+    feed_hint: 'Кликните по серверу, чтобы увидеть только его маркеры. Кликните ещё раз (или "Все источники"), чтобы сбросить.',
+    feed_all_label: 'Все источники',
+    map_heading: 'Карта',
+    map_hint: 'Используются публичные тайлы OpenStreetMap — для загрузки подложки карты нужен интернет на этой машине. Маркеры отображаются в правильных координатах и без интернета — он нужен только для фоновой картинки.',
+    th_uid: 'UID', th_source: 'Источник', th_type: 'Тип', th_callsign: 'Позывной',
+    th_coordinates: 'Координаты', th_updated: 'Обновлено', th_routed_to: 'Маршрутизируется в',
+    th_time: 'Время', th_room: 'Комната', th_sender: 'Отправитель', th_message: 'Сообщение',
+    chat_heading: 'Чат',
+    chat_hint: 'Сообщения GeoChat со всех подключений. Пересылаются как обычное CoT-событие по вашим правилам маршрутизации — здесь показаны отдельно, так как это не позиция.',
+    chat_empty_state: 'сообщений пока нет',
+    routing_heading: 'Правила маршрутизации',
+    th_from: 'Откуда', th_to: 'Куда', th_type_filter: 'Фильтр по типу', th_excl_uid: 'Искл. uid-префикс',
+    add_rule_btn: '+ Добавить правило',
+    add_server_tile: '+ Добавить сервер',
+    add_server_title: 'Добавить сервер',
+    edit_server_title: 'Изменить сервер: ',
+    server_name_label: 'Имя сервера',
+    server_address_label: 'Адрес сервера',
+    port_label: 'Порт',
+    seg_existing: 'Уже есть сертификат',
+    seg_enroll: 'Получить по логину/паролю',
+    existing_hint: 'Загрузите любой уже имеющийся сертификат — самоподписанный, выданный вашим CA, или полученный при предыдущем enrollment. p12 (client.p12 + truststore.p12) уже содержит ключ внутри; обычный PEM тоже подойдёт, если ключ упакован в тот же файл.',
+    existing_hint_edit: 'Оставьте поля файлов пустыми, чтобы сохранить текущий сертификат/truststore — загрузите файл, только если хотите его заменить.',
+    cert_file_label: 'Файл клиентского сертификата (client.pem / client.p12)',
+    cert_password_label: 'Пароль client.p12 (если .p12)',
+    ca_file_label: 'Файл доверенного хранилища (CA / truststore.p12)',
+    ca_password_label: 'Пароль truststore.p12 (если .p12)',
+    enroll_hint: 'Relay сам сгенерирует ключ и получит подписанный сертификат с сервера по логину/паролю. Пароль нигде не сохраняется — используется один раз, только для этого запроса.',
+    enroll_port_label: 'Enroll port (обычно 8446)',
+    login_label: 'Логин',
+    password_label: 'Пароль',
+    direction_label: 'Направление',
+    verify_label: 'Проверять сертификат сервера (verify_ca)',
+    trust_uid_label: 'Доверять UID этого сервера как глобально уникальным (сливать с объектами того же uid с других серверов)',
+    trust_uid_hint: 'По умолчанию включено — так же, как ведёт себя настоящий ATAK-клиент (сливает по uid независимо от источника). Выключите для источников с предсказуемой/генерируемой схемой uid (сенсоры, детекции с камер), где совпадение с uid другого сервера правдоподобно — тогда uid будет с префиксом источника и никогда не сольётся и не перезапишет ничего с другого сервера.',
+    trust_tag_trusted: 'uid доверенный',
+    trust_tag_namespaced: 'uid с префиксом',
+    cancel_btn: 'Отмена',
+    save_btn: 'Сохранить',
+    add_rule_modal_title: 'Добавить правило',
+    edit_rule_modal_title: 'Изменить правило',
+    type_filter_custom_label: 'Свой префикс типа CoT',
+    no_other_servers: 'сначала добавьте ещё один сервер',
+    from_label: 'Откуда (from)',
+    to_label: 'Куда (to, можно несколько через запятую)',
+    type_filter_label: 'CoT type prefix (опционально)',
+    exclude_uid_label: 'Исключить uid-префикс (опционально)',
+    ca_verified: 'CA verified',
+    ca_not_verified: 'CA NOT verified',
+    status_disabled: 'отключён',
+    status_connected: 'подключено',
+    status_not_connected: 'нет соединения',
+    no_outgoing_routes: 'нет исходящих правил',
+    no_incoming_routes: 'нет входящих правил',
+    identity_label: 'Подключено как',
+    disable_btn: 'Выключить',
+    enable_btn: 'Включить',
+    edit_btn: 'Изменить',
+    delete_btn: 'Удалить',
+    fill_name_host_alert: 'Заполните имя и адрес сервера',
+    enroll_creds_alert: 'Укажите логин и пароль для получения сертификата',
+    cert_file_alert: 'Укажите файл клиентского сертификата',
+    error_generic: 'Ошибка',
+    confirm_delete_server: (name) => `Удалить сервер ${name}? Связанные правила маршрутизации тоже будут удалены.`,
+    from_to_alert: 'Укажите from и хотя бы один to',
+    nowhere_no_rule: 'никуда — нет подходящего правила',
+    empty_items_state: 'пока пусто — ждём данных от серверов',
+    ago_suffix: 'назад',
+    unit_s: 'с', unit_m: 'м', unit_h: 'ч',
+    panel_access_btn: 'Доступ к панели',
+    panel_access_title: 'Доступ к панели',
+    panel_access_hint: 'Задайте или смените логин/пароль для входа в панель. Пароль хранится в виде хеша с солью, никогда в открытом виде.',
+    current_username_label: 'Текущий логин',
+    current_password_label: 'Текущий пароль',
+    new_username_label: 'Новый логин',
+    new_password_label: 'Новый пароль',
+    confirm_password_label: 'Подтвердите новый пароль',
+    auth_fill_required_alert: 'Заполните новый логин и пароль',
+    auth_mismatch_alert: 'Пароли не совпадают',
+    auth_saved_alert: 'Сохранено. Возможно, потребуется войти заново с новыми данными.',
+  },
+};
+
+let currentLang = localStorage.getItem('relay_lang') || 'en';
+let currentTab = 'servers';
+let editingServer = null;
+let feedFilter = null;       // single source name, or null = all
+let mapInstance = null;
+let mapMarkers = {};         // namespaced_uid -> L.CircleMarker
+let mapFilters = {};         // source name -> bool
+
+function t(key) { return I18N[currentLang][key]; }
+
+// deterministic color per source name, so the same server always gets the same color
+function colorForSource(name) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  const hue = Math.abs(hash) % 360;
+  return `hsl(${hue}, 70%, 55%)`;
+}
+
+function applyStaticI18n() {
+  document.documentElement.lang = currentLang;
+  document.title = t('page_title');
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    el.textContent = t(el.getAttribute('data-i18n'));
+  });
+  document.getElementById('lang-en').classList.toggle('active', currentLang === 'en');
+  document.getElementById('lang-ru').classList.toggle('active', currentLang === 'ru');
+}
+
+function setLang(lang) {
+  currentLang = lang;
+  localStorage.setItem('relay_lang', lang);
+  applyStaticI18n();
+  document.getElementById('existing-hint').textContent = editingServer ? t('existing_hint_edit') : t('existing_hint');
+  if (document.getElementById('route-modal').classList.contains('open')) {
+    populateTypeSelect(currentTypeFilterValue());
+  }
+  renderServers();
+  renderRoutes();
+  renderFeedSources();
+  renderItems();
+  renderChat();
+  if (mapInstance) renderMap();
+}
+
+function switchTab(tabName) {
+  currentTab = tabName;
+  document.querySelectorAll('.tab-panel').forEach(p => p.style.display = 'none');
+  document.getElementById('tab-' + tabName).style.display = 'block';
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tabName));
+  if (tabName === 'map') {
+    ensureMap();
+    setTimeout(() => { if (mapInstance) mapInstance.invalidateSize(); }, 50);
+    renderMap();
+  }
+}
+
+async function fetchServers() {
+  const res = await fetch('/api/servers');
+  return res.json();
+}
+
+function routeSummaryFor(name) {
+  const routes = window._routes || [];
+  const outs = new Set();
+  const ins = new Set();
+  routes.forEach(r => {
+    if (r.from === name) (r.to || []).forEach(target => outs.add(target));
+    if ((r.to || []).includes(name)) ins.add(r.from);
+  });
+  return { out: [...outs], in: [...ins] };
+}
+
+function nameListHtml(names) {
+  return names.map(n => `<span class="color-dot" style="background:${colorForSource(n)}"></span>${n}`).join(' ');
+}
+
+function serverCardHtml(s) {
+  const statusClass = !s.enabled ? 'server-disabled' : (s.connected ? 'connected' : 'disconnected');
+  const caTag = s.verify_ca ? t('ca_verified') : t('ca_not_verified');
+  const trustTag = s.trust_uid !== false ? t('trust_tag_trusted') : t('trust_tag_namespaced');
+  const statusText = !s.enabled ? t('status_disabled') : (s.connected ? t('status_connected') : t('status_not_connected'));
+
+  const { out, in: incoming } = routeSummaryFor(s.name);
+  const canOut = s.direction === 'out' || s.direction === 'both';
+  const canIn = s.direction === 'in' || s.direction === 'both';
+  let routeLines = '';
+  if (out.length) {
+    routeLines += `<div class="card-meta">&rarr; ${nameListHtml(out)}</div>`;
+  } else if (canOut) {
+    routeLines += `<div class="card-meta" style="color:var(--red)">&rarr; ${t('no_outgoing_routes')}</div>`;
+  }
+  if (incoming.length) {
+    routeLines += `<div class="card-meta">&larr; ${nameListHtml(incoming)}</div>`;
+  } else if (canIn) {
+    routeLines += `<div class="card-meta" style="color:var(--muted)">&larr; ${t('no_incoming_routes')}</div>`;
+  }
+
+  return `
+    <div class="card ${statusClass}">
+      <div class="card-top">
+        <span class="card-name"><span class="dot"></span>${s.name}</span>
+        <span class="tag">${s.direction}</span>
+      </div>
+      <div class="card-meta">${s.host}:${s.port} · ${caTag} · ${trustTag}</div>
+      <div class="card-meta">${statusText}</div>
+      ${s.identity_cn ? `<div class="card-meta">👤 ${t('identity_label')}: ${escapeHtml(s.identity_cn)}</div>` : ''}
+      ${routeLines}
+      <div class="card-actions">
+        <button onclick="toggleServer('${s.name}')">${s.enabled ? t('disable_btn') : t('enable_btn')}</button>
+        <button onclick="editServer('${s.name}')">${t('edit_btn')}</button>
+        <button class="btn-danger" onclick="deleteServer('${s.name}')">${t('delete_btn')}</button>
+      </div>
+    </div>`;
+}
+
+function renderServers() {
+  const servers = window._servers || [];
+  const grid = document.getElementById('servers-grid');
+  grid.innerHTML = servers.map(serverCardHtml).join('') +
+    `<div class="add-tile" onclick="openServerModal()">${t('add_server_tile')}</div>`;
+}
+
+async function refreshServers() {
+  window._servers = await fetchServers();
+  renderServers();
+  renderFeedSources();
+  const fromSelect = document.getElementById('r-from');
+  const prevFrom = fromSelect.value;
+  fromSelect.innerHTML = window._servers.map(s => `<option value="${s.name}">${s.name}</option>`).join('');
+  // rebuilding the <select> wipes the user's current selection - restore
+  // it if that server still exists (this select is rebuilt every 4s by
+  // the polling loop, so without this the "From" field kept jumping back
+  // to the first server while someone was mid-edit)
+  if (window._servers.some(s => s.name === prevFrom)) {
+    fromSelect.value = prevFrom;
+  }
+  if (document.getElementById('route-modal').classList.contains('open')) {
+    renderToCheckboxes();
+  }
+}
+
+function fmtAgo(seconds) {
+  if (seconds < 60) return seconds.toFixed(0) + t('unit_s');
+  if (seconds < 3600) return (seconds / 60).toFixed(0) + t('unit_m');
+  return (seconds / 3600).toFixed(1) + t('unit_h');
+}
+
+// -------- Live Feed tab: per-source drill-down --------
+
+function setFeedFilter(name) {
+  feedFilter = (feedFilter === name) ? null : name;
+  document.getElementById('feed-filter-label').textContent = feedFilter || t('feed_all_label');
+  renderFeedSources();
+  renderItems();
+}
+
+function renderFeedSources() {
+  const items = window._items || [];
+  const servers = window._servers || [];
+  const counts = {};
+  items.forEach(it => { counts[it.source] = (counts[it.source] || 0) + 1; });
+  const names = new Set([...servers.map(s => s.name), ...Object.keys(counts)]);
+  const grid = document.getElementById('feed-source-grid');
+  if (!grid) return;
+  grid.innerHTML = [...names].map(name => {
+    const srv = servers.find(s => s.name === name);
+    const count = counts[name] || 0;
+    const active = feedFilter === name;
+    return `<div class="card${active ? ' feed-active' : ''}" style="cursor:pointer;border-left-color:${colorForSource(name)}" onclick="setFeedFilter('${name}')">
+      <div class="card-top">
+        <span class="card-name"><span class="color-dot" style="background:${colorForSource(name)}"></span>${name}</span>
+        <span class="tag">${count}</span>
+      </div>
+      <div class="card-meta">${srv ? srv.host + ':' + srv.port : ''}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderItems() {
+  const label = document.getElementById('feed-filter-label');
+  if (label) label.textContent = feedFilter || t('feed_all_label');
+
+  let items = window._items || [];
+  if (feedFilter) items = items.filter(it => it.source === feedFilter);
+  const countEl = document.getElementById('feed-count');
+  if (countEl) countEl.textContent = items.length;
+
+  const sorted = [...items].sort((a, b) => a.age_seconds - b.age_seconds);
+  const body = document.getElementById('items-body');
+  if (!body) return;
+  body.innerHTML = sorted.map(it => {
+    const routedTo = (it.routed_to && it.routed_to.length) ? it.routed_to.join(', ') : `<span style="color:var(--red)">${t('nowhere_no_rule')}</span>`;
+    return `
+    <tr>
+      <td>${it.namespaced_uid}</td>
+      <td><span class="color-dot" style="background:${colorForSource(it.source)}"></span>${it.source}</td>
+      <td>${it.type}</td>
+      <td>${it.callsign || '—'}</td>
+      <td>${it.lat.toFixed(5)}, ${it.lon.toFixed(5)}</td>
+      <td>${fmtAgo(it.age_seconds)} ${t('ago_suffix')}</td>
+      <td>${routedTo}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="7" style="color:var(--muted)">${t('empty_items_state')}</td></tr>`;
+}
+
+async function refreshItems() {
+  const res = await fetch('/api/items');
+  window._items = await res.json();
+  renderFeedSources();
+  renderItems();
+  if (mapInstance) renderMap();
+}
+
+// -------- Chat tab --------
+
+function escapeHtml(s) {
+  const div = document.createElement('div');
+  div.textContent = s == null ? '' : String(s);
+  return div.innerHTML;
+}
+
+function renderChat() {
+  const messages = window._chat || [];
+  const countEl = document.getElementById('chat-count');
+  if (countEl) countEl.textContent = messages.length;
+  const body = document.getElementById('chat-body');
+  if (!body) return;
+  // newest first
+  const sorted = [...messages].sort((a, b) => a.age_seconds - b.age_seconds);
+  body.innerHTML = sorted.map(m => `
+    <tr>
+      <td>${fmtAgo(m.age_seconds)} ${t('ago_suffix')}</td>
+      <td><span class="color-dot" style="background:${colorForSource(m.source)}"></span>${escapeHtml(m.source)}</td>
+      <td>${escapeHtml(m.room)}</td>
+      <td>${escapeHtml(m.sender)}</td>
+      <td>${escapeHtml(m.message)}</td>
+    </tr>`).join('') || `<tr><td colspan="5" style="color:var(--muted)">${t('chat_empty_state')}</td></tr>`;
+}
+
+async function refreshChat() {
+  const res = await fetch('/api/chat');
+  window._chat = await res.json();
+  renderChat();
+}
+
+// -------- Map tab --------
+
+function ensureMap() {
+  if (mapInstance) return;
+  mapInstance = L.map('map').setView([20, 0], 2);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap contributors',
+  }).addTo(mapInstance);
+}
+
+function toggleMapFilter(name, checked) {
+  mapFilters[name] = checked;
+  renderMap();
+}
+
+function renderMapFilters() {
+  const servers = window._servers || [];
+  const items = window._items || [];
+  const names = new Set([...servers.map(s => s.name), ...items.map(it => it.source)]);
+  const container = document.getElementById('map-filters');
+  if (!container) return;
+  container.innerHTML = [...names].map(name => {
+    if (!(name in mapFilters)) mapFilters[name] = true;
+    return `<label>
+      <input type="checkbox" ${mapFilters[name] ? 'checked' : ''} onchange="toggleMapFilter('${name}', this.checked)">
+      <span class="color-dot" style="background:${colorForSource(name)}"></span>${name}
+    </label>`;
+  }).join('');
+}
+
+function renderMap() {
+  if (!mapInstance) return;
+  renderMapFilters();
+  const items = (window._items || []).filter(it => mapFilters[it.source] !== false);
+  const seen = new Set();
+
+  items.forEach(it => {
+    seen.add(it.namespaced_uid);
+    const color = colorForSource(it.source);
+    const popup = `<b>${it.callsign || it.uid}</b><br>${it.source} &middot; ${it.type}<br>${it.lat.toFixed(5)}, ${it.lon.toFixed(5)}<br>${fmtAgo(it.age_seconds)} ${t('ago_suffix')}`;
+    if (mapMarkers[it.namespaced_uid]) {
+      mapMarkers[it.namespaced_uid].setLatLng([it.lat, it.lon]);
+      mapMarkers[it.namespaced_uid].setPopupContent(popup);
+    } else {
+      const marker = L.circleMarker([it.lat, it.lon], {
+        radius: 7, color, fillColor: color, fillOpacity: 0.85, weight: 2,
+      }).addTo(mapInstance);
+      marker.bindPopup(popup);
+      mapMarkers[it.namespaced_uid] = marker;
+    }
+  });
+
+  Object.keys(mapMarkers).forEach(uid => {
+    if (!seen.has(uid)) {
+      mapInstance.removeLayer(mapMarkers[uid]);
+      delete mapMarkers[uid];
+    }
+  });
+}
+
+// -------- Routing rules --------
+
+function renderRoutes() {
+  const routes = window._routes || [];
+  document.getElementById('routes-body').innerHTML = routes.map(r => `
+    <tr>
+      <td>${r.from}</td>
+      <td>${(r.to || []).join(', ')}</td>
+      <td>${r.cot_type_prefix || '—'}</td>
+      <td>${r.exclude_uid_prefix || '—'}</td>
+      <td>
+        <button onclick="editRoute('${r.id}')">${t('edit_btn')}</button>
+        <button class="btn-danger" onclick="deleteRoute('${r.id}')">${t('delete_btn')}</button>
+      </td>
+    </tr>`).join('');
+}
+
+async function refreshRoutes() {
+  const res = await fetch('/api/routes');
+  window._routes = await res.json();
+  renderRoutes();
+  renderServers();
+}
+
+// -------- Server modal --------
+
+function setServerMode(mode) {
+  document.getElementById('seg-existing').classList.toggle('active', mode === 'existing');
+  document.getElementById('seg-enroll').classList.toggle('active', mode === 'enroll');
+  document.getElementById('mode-existing-fields').style.display = mode === 'existing' ? 'block' : 'none';
+  document.getElementById('mode-enroll-fields').style.display = mode === 'enroll' ? 'block' : 'none';
+  window._serverMode = mode;
+}
+
+function openServerModal() {
+  editingServer = null;
+  document.getElementById('server-modal-title').textContent = t('add_server_title');
+  setServerMode('existing');
+  ['name','host','cert-password','ca-password','enroll-user','enroll-pass'].forEach(id => document.getElementById('f-'+id).value = '');
+  document.getElementById('f-cert').value = '';
+  document.getElementById('f-ca').value = '';
+  document.getElementById('f-port').value = '8089';
+  document.getElementById('f-enroll-port').value = '8446';
+  document.getElementById('f-direction').value = 'both';
+  document.getElementById('f-verify').checked = true;
+  document.getElementById('f-trust-uid').checked = true;
+  document.getElementById('existing-hint').textContent = t('existing_hint');
+  document.getElementById('server-modal').classList.add('open');
+}
+
+function editServer(name) {
+  const s = window._servers.find(x => x.name === name);
+  if (!s) return;
+  editingServer = name;
+  document.getElementById('server-modal-title').textContent = t('edit_server_title') + name;
+  // the mode switch is available here too: "Get via login/password" on an
+  // existing server = re-enroll (refresh the certificate after the fact)
+  setServerMode('existing');
+  document.getElementById('f-name').value = s.name;
+  document.getElementById('f-host').value = s.host;
+  document.getElementById('f-port').value = s.port;
+  // file inputs can never be pre-filled with the current file (browsers
+  // don't allow it) - leaving them empty means "keep what's already there"
+  document.getElementById('f-cert').value = '';
+  document.getElementById('f-ca').value = '';
+  document.getElementById('f-cert-password').value = '';
+  document.getElementById('f-ca-password').value = '';
+  document.getElementById('f-enroll-user').value = s.enroll_username || '';
+  document.getElementById('f-enroll-pass').value = '';
+  document.getElementById('f-enroll-port').value = '8446';
+  document.getElementById('f-direction').value = s.direction;
+  document.getElementById('f-verify').checked = s.verify_ca;
+  document.getElementById('f-trust-uid').checked = s.trust_uid !== false;
+  document.getElementById('existing-hint').textContent = t('existing_hint_edit');
+  document.getElementById('server-modal').classList.add('open');
+}
+
+function closeServerModal() { document.getElementById('server-modal').classList.remove('open'); }
+
+async function saveServer() {
+  const mode = window._serverMode || 'existing';
+  const name = document.getElementById('f-name').value.trim();
+  const host = document.getElementById('f-host').value.trim();
+  if (!name || !host) { alert(t('fill_name_host_alert')); return; }
+
+  let res;
+  if (mode === 'enroll') {
+    const payload = {
+      name, host,
+      port: parseInt(document.getElementById('f-port').value, 10),
+      enroll_port: parseInt(document.getElementById('f-enroll-port').value, 10),
+      username: document.getElementById('f-enroll-user').value.trim(),
+      password: document.getElementById('f-enroll-pass').value,
+      direction: document.getElementById('f-direction').value,
+      verify_ca: document.getElementById('f-verify').checked,
+      trust_uid: document.getElementById('f-trust-uid').checked,
+    };
+    if (!payload.username || !payload.password) { alert(t('enroll_creds_alert')); return; }
+    // same endpoint: if a server with this name already exists, this is a re-enroll (certificate refresh), not an "already exists" error
+    res = await fetch('/api/servers/enroll', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
+  } else {
+    const certFile = document.getElementById('f-cert').files[0];
+    const caFile = document.getElementById('f-ca').files[0];
+    if (!editingServer && !certFile) { alert(t('cert_file_alert')); return; }
+
+    const fd = new FormData();
+    fd.append('name', name);
+    fd.append('host', host);
+    fd.append('port', document.getElementById('f-port').value);
+    fd.append('direction', document.getElementById('f-direction').value);
+    fd.append('verify_ca', document.getElementById('f-verify').checked ? 'true' : 'false');
+    fd.append('trust_uid', document.getElementById('f-trust-uid').checked ? 'true' : 'false');
+    fd.append('cert_password', document.getElementById('f-cert-password').value);
+    fd.append('ca_password', document.getElementById('f-ca-password').value);
+    if (certFile) fd.append('cert_file', certFile);
+    if (caFile) fd.append('ca_file', caFile);
+
+    const url = editingServer ? `/api/servers/${editingServer}` : '/api/servers';
+    const method = editingServer ? 'PUT' : 'POST';
+    // no Content-Type header here on purpose - the browser sets the
+    // correct multipart boundary itself when the body is a FormData
+    res = await fetch(url, { method, body: fd });
+  }
+
+  if (!res.ok) { const e = await res.json(); alert(e.error || t('error_generic')); return; }
+  closeServerModal();
+  refreshServers();
+}
+
+async function toggleServer(name) {
+  await fetch(`/api/servers/${name}/toggle`, { method: 'POST' });
+  refreshServers();
+}
+
+async function deleteServer(name) {
+  if (!confirm(t('confirm_delete_server')(name))) return;
+  await fetch(`/api/servers/${name}`, { method: 'DELETE' });
+  refreshServers();
+  refreshRoutes();
+}
+
+// Curated CoT type prefixes for the filter picker - not full MIL-STD-2525
+// iconography (that needs a symbol-rendering library and a real SIDC
+// mapping), just readable labels + affiliation-colored emoji so people
+// don't have to know the raw dot-separated codes by heart. "Custom"
+// falls back to a free-text field for anything not in this list.
+const COT_TYPE_OPTIONS = [
+  { value: '', label_en: 'All types (no filter)', label_ru: 'Все типы (без фильтра)' },
+  { value: 'a-f-G-U-C', label_en: '🔵 Friendly ground unit (a-f-G-U-C)', label_ru: '🔵 Свои, наземный юнит (a-f-G-U-C)' },
+  { value: 'a-f-G', label_en: '🔵 Friendly ground (a-f-G)', label_ru: '🔵 Свои, наземные (a-f-G)' },
+  { value: 'a-f-A', label_en: '🔵 Friendly air (a-f-A)', label_ru: '🔵 Свои, воздух (a-f-A)' },
+  { value: 'a-f-S', label_en: '🔵 Friendly surface/sea (a-f-S)', label_ru: '🔵 Свои, надводные (a-f-S)' },
+  { value: 'a-h-G', label_en: '🔴 Hostile ground (a-h-G)', label_ru: '🔴 Противник, наземные (a-h-G)' },
+  { value: 'a-h-A', label_en: '🔴 Hostile air (a-h-A)', label_ru: '🔴 Противник, воздух (a-h-A)' },
+  { value: 'a-n-G', label_en: '🟢 Neutral ground (a-n-G)', label_ru: '🟢 Нейтральные, наземные (a-n-G)' },
+  { value: 'a-u-G', label_en: '🟡 Unknown ground (a-u-G)', label_ru: '🟡 Неизвестные, наземные (a-u-G)' },
+  { value: 'a-u-A', label_en: '🟡 Unknown air (a-u-A)', label_ru: '🟡 Неизвестные, воздух (a-u-A)' },
+  { value: 'b-m-p', label_en: '📍 Points / markers (b-m-p)', label_ru: '📍 Точки/маркеры (b-m-p)' },
+  { value: 'b-t-f', label_en: '💬 Chat messages (b-t-f)', label_ru: '💬 Сообщения чата (b-t-f)' },
+  { value: '__custom__', label_en: '✏️ Custom prefix…', label_ru: '✏️ Свой префикс…' },
+];
+
+function populateTypeSelect(selectedValue) {
+  const sel = document.getElementById('r-type-select');
+  const known = COT_TYPE_OPTIONS.some(o => o.value === selectedValue);
+  sel.innerHTML = COT_TYPE_OPTIONS.map(o =>
+    `<option value="${o.value}">${currentLang === 'ru' ? o.label_ru : o.label_en}</option>`
+  ).join('');
+  if (selectedValue && !known) {
+    sel.value = '__custom__';
+    document.getElementById('r-type-custom').value = selectedValue;
+    document.getElementById('r-type-custom-wrap').style.display = 'block';
+  } else {
+    sel.value = selectedValue || '';
+    document.getElementById('r-type-custom').value = '';
+    document.getElementById('r-type-custom-wrap').style.display = (sel.value === '__custom__') ? 'block' : 'none';
+  }
+}
+
+function onTypeSelectChange() {
+  const isCustom = document.getElementById('r-type-select').value === '__custom__';
+  document.getElementById('r-type-custom-wrap').style.display = isCustom ? 'block' : 'none';
+}
+
+function currentTypeFilterValue() {
+  const sel = document.getElementById('r-type-select').value;
+  if (sel === '__custom__') {
+    return document.getElementById('r-type-custom').value.trim() || null;
+  }
+  return sel || null;
+}
+
+let toSelection = new Set();
+let editingRoute = null;
+
+function toggleToSelection(name, checked) {
+  if (checked) toSelection.add(name); else toSelection.delete(name);
+}
+
+function renderToCheckboxes() {
+  const fromName = document.getElementById('r-from').value;
+  const servers = (window._servers || []).filter(s => s.name !== fromName);
+  const container = document.getElementById('r-to-list');
+  container.innerHTML = servers.map(s => `
+    <label style="display:flex; align-items:center; gap:8px; margin-bottom:6px; cursor:pointer; font-size:13px;">
+      <input type="checkbox" value="${s.name}" ${toSelection.has(s.name) ? 'checked' : ''} onchange="toggleToSelection('${s.name}', this.checked)">
+      <span class="color-dot" style="background:${colorForSource(s.name)}"></span>${s.name}
+    </label>`).join('') || `<div style="color:var(--muted); font-size:13px;">${t('no_other_servers')}</div>`;
+}
+
+function openRouteModal() {
+  editingRoute = null;
+  document.getElementById('route-modal-title').textContent = t('add_rule_modal_title');
+  toSelection = new Set();
+  document.getElementById('r-excl').value = '';
+  populateTypeSelect('');
+  renderToCheckboxes();
+  document.getElementById('route-modal').classList.add('open');
+}
+
+function editRoute(routeId) {
+  const r = (window._routes || []).find(x => x.id === routeId);
+  if (!r) return;
+  editingRoute = routeId;
+  document.getElementById('route-modal-title').textContent = t('edit_rule_modal_title');
+  document.getElementById('r-from').value = r.from;
+  toSelection = new Set(r.to || []);
+  document.getElementById('r-excl').value = r.exclude_uid_prefix || '';
+  populateTypeSelect(r.cot_type_prefix || '');
+  renderToCheckboxes();
+  document.getElementById('route-modal').classList.add('open');
+}
+
+function closeRouteModal() { document.getElementById('route-modal').classList.remove('open'); }
+
+async function saveRoute() {
+  const fromName = document.getElementById('r-from').value;
+  const to = [...toSelection].filter(n => n !== fromName);
+  const payload = {
+    from: fromName,
+    to,
+    cot_type_prefix: currentTypeFilterValue(),
+    exclude_uid_prefix: document.getElementById('r-excl').value.trim() || null,
+  };
+  if (!payload.from || to.length === 0) { alert(t('from_to_alert')); return; }
+
+  const url = editingRoute ? `/api/routes/${editingRoute}` : '/api/routes';
+  const method = editingRoute ? 'PUT' : 'POST';
+  const res = await fetch(url, { method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
+  if (!res.ok) { const e = await res.json(); alert(e.error || t('error_generic')); return; }
+  closeRouteModal();
+  refreshRoutes();
+}
+
+async function deleteRoute(id) {
+  await fetch(`/api/routes/${id}`, { method: 'DELETE' });
+  refreshRoutes();
+}
+
+// -------- Panel access (auth) --------
+
+let authConfigured = false;
+
+async function openAuthModal() {
+  const res = await fetch('/api/auth');
+  const status = await res.json();
+  authConfigured = status.configured;
+  document.getElementById('auth-current-fields').style.display = authConfigured ? 'block' : 'none';
+  document.getElementById('a-cur-user').value = '';
+  document.getElementById('a-cur-pass').value = '';
+  document.getElementById('a-new-user').value = status.username || '';
+  document.getElementById('a-new-pass').value = '';
+  document.getElementById('a-confirm-pass').value = '';
+  document.getElementById('auth-modal').classList.add('open');
+}
+
+function closeAuthModal() { document.getElementById('auth-modal').classList.remove('open'); }
+
+async function saveAuth() {
+  const newUser = document.getElementById('a-new-user').value.trim();
+  const newPass = document.getElementById('a-new-pass').value;
+  const confirmPass = document.getElementById('a-confirm-pass').value;
+  if (!newUser || !newPass) { alert(t('auth_fill_required_alert')); return; }
+  if (newPass !== confirmPass) { alert(t('auth_mismatch_alert')); return; }
+
+  const payload = { new_username: newUser, new_password: newPass };
+  if (authConfigured) {
+    payload.current_username = document.getElementById('a-cur-user').value;
+    payload.current_password = document.getElementById('a-cur-pass').value;
+  }
+
+  const res = await fetch('/api/auth', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
+  if (!res.ok) { const e = await res.json(); alert(e.error || t('error_generic')); return; }
+  closeAuthModal();
+  alert(t('auth_saved_alert'));
+}
+
+applyStaticI18n();
+refreshServers();
+refreshRoutes();
+refreshItems();
+refreshChat();
+setInterval(refreshServers, 4000);
+setInterval(refreshItems, 3000);
+setInterval(refreshChat, 3000);
+</script>
+</body>
+</html>

@@ -1,0 +1,27 @@
+# Real runtime config and credentials - never commit these.
+# Only config.example.yaml belongs in the repo.
+config.yaml
+certs/
+*.p12
+*.pfx
+*.pem
+*.key
+*.crt
+*.cer
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+*.egg-info/
+
+# Editor/OS noise
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
